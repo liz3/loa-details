@@ -37,11 +37,12 @@ export async function parseLogs(
   const unparsedLogs = await fsPromises.readdir(mainFolder);
   const parsedLogs = await fsPromises.readdir(parsedLogFolder);
 
-  let mainJson: { [key: string]: { mtime: Date; logParserVersion: number } } = {
+  let mainJson: { [key: string]: { mtime: Date; logParserVersion: number, hasPlayers?: boolean } } = {
     /*
     "example.log":{
       mtime: ...,
-      logParserVersion: ...
+      logParserVersion: ...,
+      hasPlayers: ...
     }
     */
   };
@@ -78,7 +79,7 @@ export async function parseLogs(
     if (parsedLogs.includes(jsonName)) {
       let shouldUnlink = false;
       if (Object.keys(mainJson).includes(filename)) {
-        if (
+        if (!mainJson[filename].hasPlayers ||
           new Date(mainJson[filename].mtime).getTime() <
             new Date(logStats.mtime).getTime() ||
           mainJson[filename].logParserVersion < PARSED_LOG_VERSION
@@ -123,6 +124,7 @@ export async function parseLogs(
         mainJson[filename] = {
           mtime: new Date(logStats.mtime),
           logParserVersion: PARSED_LOG_VERSION,
+          hasPlayers: true,
         };
       }
 
@@ -170,8 +172,13 @@ function parseLog(
           damageTaken: 0,
           isPlayer: false,
         };
-
+        const players = []
         encounter.entities.forEach((i) => {
+          if(i.isPlayer)
+            players.push({
+              id: i.id,
+              name: i.name
+            })
           if (i.damageTaken > mostDamageTakenEntity.damageTaken) {
             mostDamageTakenEntity = {
               name: i.name,
@@ -184,6 +191,7 @@ function parseLog(
         const encounterDetails = {
           duration,
           mostDamageTakenEntity,
+          players
         };
 
         const encounterId = randomUUID();
@@ -314,4 +322,8 @@ type Encounter = {
     damageTaken: number;
     isPlayer: boolean;
   };
+  players?: {
+    id: string;
+    name: string;
+  }[];
 };

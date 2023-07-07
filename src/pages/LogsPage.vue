@@ -81,6 +81,30 @@
             style="width: 256px"
           />
 
+          <q-select
+            v-if="logViewerStore.viewerState === 'none'"
+            filled
+            v-model="logViewerStore.playerFilter"
+            @update:model-value="computedLogFileList()"
+            multiple
+            clearable
+            :options="logViewerStore.playerOptions"
+            label="Filter Players"
+            style="width: 256px; margin-left: 16px"
+          />
+
+          <q-select
+            v-if="logViewerStore.viewerState === 'viewing-session'"
+            filled
+            v-model="logViewerStore.playerFilter"
+            @update:model-value="calculateEncounterRows()"
+            multiple
+            clearable
+            :options="logViewerStore.playerOptions"
+            label="Filter Players"
+            style="width: 256px; margin-left: 16px;"
+          />
+
           <q-space />
 
           <div v-if="logViewerStore.viewerState === 'none'">
@@ -153,7 +177,7 @@
               fab
               icon="arrow_back"
               color="primary"
-              @click="changeLogViewerStoreState('none')"
+              @click="resetToLoglist()"
             />
           </q-page-sticky>
           <q-timeline dark color="secondary">
@@ -166,7 +190,7 @@
 
             <q-timeline-entry
               v-for="encounter in encounterRows"
-              :key="encounter.encounterName"
+              :key="encounter.key"
               :title="
                 encounter.encounterName +
                 ' | ' +
@@ -257,6 +281,7 @@ type RowData = {
   startingMs: number;
   duration: number;
   attempts: SessionData[];
+  key: number;
 };
 
 const settingsStore = useSettingsStore();
@@ -352,6 +377,7 @@ function onSessionRowClick(event: Event, row: SessionInfo) {
   logViewerStore.currentSessionName = row.filename;
 
   logViewerStore.encounterOptions = [];
+  logViewerStore.playerOptions = [];
   logViewerStore.encounterFilter.length = 0;
 
   row.sessionEncounters.forEach((encounter) => {
@@ -367,9 +393,14 @@ function onSessionRowClick(event: Event, row: SessionInfo) {
     if (!logViewerStore.encounterOptions.includes(encounterName)) {
       logViewerStore.encounterOptions.push(encounterName);
     }
+    for(const player of encounter.players || []) {
+      if(!logViewerStore.playerOptions.includes(player.name))
+        logViewerStore.playerOptions.push(player.name)
+    }
   });
 
   logViewerStore.encounterOptions.sort();
+  logViewerStore.playerOptions.sort();
   calculateEncounterRows();
 }
 
@@ -404,10 +435,17 @@ function calculateEncounterRows() {
         });
 
         if (
-          logViewerStore.encounterFilter.length > 0 &&
+          logViewerStore.encounterFilter && logViewerStore.encounterFilter.length > 0 &&
           !logViewerStore.encounterFilter.includes(encounterName) // not includes
         ) {
           return;
+        }
+        if(
+          logViewerStore.playerFilter && logViewerStore.playerFilter.length) {
+            const names = (encounter.players || []).map(e => e.name);
+            if(logViewerStore.playerFilter.find(n => !names.includes(n)))
+              return;
+            console.log(logViewerStore.playerFilter, names)
         }
 
         if (
@@ -423,6 +461,7 @@ function calculateEncounterRows() {
             startingMs,
             duration: encounter.durationTs,
             attempts: [encounter],
+            key: encounter.key,
           });
         }
 
@@ -464,11 +503,17 @@ const logFile: { viewingLogFile: boolean; data?: GameStateFile } = reactive({
   viewingLogFile: false,
 });
 
+function resetToLoglist() {
+  computedLogFileList()
+  changeLogViewerStoreState('none').finally(() => null)
+
+}
 function calculateLogFileList(value: ParsedLogInfo[]) {
   logViewerStore.resetState();
 
   logViewerStore.encounterOptions = [];
-
+  logViewerStore.playerOptions = [];
+  let keyCount = 0;
   value.forEach((val) => {
     let totalDuration = 0;
     let sessionEncounters: SessionData[] = [];
@@ -481,6 +526,8 @@ function calculateLogFileList(value: ParsedLogInfo[]) {
         encounterName: val_encounter.mostDamageTakenEntity.name,
         durationTs: val_encounter.duration,
         duration: millisToMinutesAndSeconds(val_encounter.duration),
+        players: val_encounter.players,
+        key: keyCount++,
       });
     });
 
@@ -489,10 +536,15 @@ function calculateLogFileList(value: ParsedLogInfo[]) {
 
       if (!logViewerStore.encounterOptions.includes(encounterName)) {
         logViewerStore.encounterOptions.push(encounterName);
+      } 
+      for(const player of encounter.players || []) {
+        if(!logViewerStore.playerOptions.includes(player.name))
+          logViewerStore.playerOptions.push(player.name)
       }
     });
 
     logViewerStore.encounterOptions.sort();
+    logViewerStore.playerOptions.sort();
 
     if (
       totalDuration >=
@@ -520,7 +572,7 @@ function calculateLogFileList(value: ParsedLogInfo[]) {
 }
 
 function computedLogFileList() {
-  if (logViewerStore.logfileFilter.length === 0) {
+  if ((!logViewerStore.logfileFilter || logViewerStore.logfileFilter.length === 0) && (!logViewerStore.playerFilter || logViewerStore.playerFilter.length === 0)) {
     logViewerStore.computedSessions = logViewerStore.sessions;
     return;
   }
@@ -531,16 +583,25 @@ function computedLogFileList() {
     const filteredEncounters = [];
 
     session.sessionEncounters.forEach((encounter) => {
-      if (logViewerStore.logfileFilter.includes(encounter.encounterName)) {
-        filteredEncounters.push(encounter);
+
+      if (logViewerStore.logfileFilter.length && !logViewerStore.logfileFilter.includes(encounter.encounterName)) {
+       return;
       }
+       
+      if( logViewerStore.playerFilter && 
+        logViewerStore.playerFilter.length) {
+        const names = (encounter.players || []).map(e => e.name)
+      if(logViewerStore.playerFilter.find(n => !names.includes(n)))
+        return;
+    }
+
+  filteredEncounters.push(encounter);
     });
 
     if (filteredEncounters.length > 0) {
       filteredSessions.push(session);
     }
   });
-
   logViewerStore.computedSessions = filteredSessions;
 }
 

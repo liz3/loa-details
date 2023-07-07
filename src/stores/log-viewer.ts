@@ -5,6 +5,11 @@ export type SessionData = {
   encounterName: string;
   durationTs: number;
   duration: string;
+  key: number;
+  players?: {
+    id: string,
+    name:string;
+  }[];
 };
 
 export type SessionInfo = {
@@ -32,6 +37,8 @@ type State = {
   computedSessions: SessionInfo[];
   encounterOptions: string[];
   encounterFilter: string[];
+  playerOptions: string[];
+  playerFilter: string[];
   logfileFilter: string[];
 };
 
@@ -44,6 +51,8 @@ export const useLogViewerStore = defineStore("log-viewer", {
     computedSessions: [],
     encounterOptions: [],
     encounterFilter: [],
+    playerFilter: [],
+    playerOptions: [],
     logfileFilter: [],
   }),
   actions: {
